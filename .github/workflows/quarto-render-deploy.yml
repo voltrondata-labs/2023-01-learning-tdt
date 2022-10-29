@@ -41,10 +41,8 @@ jobs:
         with:
           use-public-rspm: true
 
-      - uses: r-lib/actions/setup-renv@v2
-
-      - name: Build site 🔧
-        run: Rscript scripts/build_website.R
+      - name: Render Quarto Project 🔧
+        uses: quarto-dev/quarto-actions/render@v2
 
       - name: Deploy 🚀
         if: github.event_name != 'pull_request'
