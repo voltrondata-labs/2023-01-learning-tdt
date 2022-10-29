@@ -1,0 +1,310 @@
+---
+title: "Part 2 -- Data Import and File Formats"
+---
+
+
+## Bringing and manipulating data in Arrow
+
+### Learning objectives
+
+* 
+
+### Small files
+
+* Use the single file API
+* Instructor first demonstrates on table 'observers'.
+
+
+```{r}
+observers <- read_tsv_arrow("~/datasets/inaturalist/csv/observers.csv")
+```
+
+* Examine the output, point out:
+  - data types
+  - missing data
+  
+* Activity: participants do it on the taxa table (probably all
+  together, no need for breakout rooms).
+
+```{r}
+taxa <- read_tsv_arrow("~/datasets/inaturalists/csv/taxa.csv")
+```
+
+### Introduction to Ibis
+
+* Arrow is a data-format and a standard.
+* PyArrow (and arrow R package) provides ways to interact with the
+  data. However, while the arrow R package uses **dplyr** syntax to
+  query data, the PyArrow syntax can become complicated for data
+  manipulation. It is also possible to use pandas, but if the data is
+  large, you will run into memory issues and the
+  serialization/deserialization process can slow things down.
+* For this training, we will use Ibis. Ibis provides a consistent and
+  expressive syntax, that supports multiple backends. For this
+  training, we will rely on DuckDB as a backend. It supports many of
+  the same data formats also supported by PyArrow making it easy (but
+  also maybe confusing at times) to go from one to the other.
+  
+  [insert figure something like:
+  
+  ```
+  
+  
+                             PyArrow      ---------->    data files
+                                               /     (CSV, Arrow, Parquet)
+           Ibis     ---->    DuckDB       ----/
+   ```
+   ]
+
+* Additionally, with Ibis, the code used for queries is independent
+  from the backend. If the data are moved to a different system
+  (PostgreSQL, SQLite, Google BigQuery, etc...), the code will not
+  need to be rewritten.
+* We will start by using Ibis and DuckDB to query the data in the CSV
+  files directly. Later we will work with larger data files where we
+  can have much better performance by using file formats designed for
+  query execution speed.
+
+* Instructor demonstrates queries on the taxa table:
+  - filter on Kingdom and active
+  - how many "active" species (and lower ranks) are in the dataset?
+  - what are the names of the "active" species in the genus _Panthera_
+    (tigers, lions, leopards, panthers, ...).
+
+ [here the goal would be for participants to start interacting with
+ Arrow data while starting to learn about the structure of the data we
+ will use in the training. With R, that would be the natural thing to
+ do with the dplyr interface. To avoid introducing too many ways of
+ interacting with data (and limit cognitive load), focus on working
+ with Ibis. Would it be a good idea to add demonstrations on how to
+ do some of these queries with pandas or PyArrow as well here just to
+ show that it's possible? and how the syntax compares for participants
+ who will most likely be already familiar with Pandas?]
+
+[this needs to be translated to Ibis]
+```{r}
+taxa %>%
+  filter(rank == "kingdom" & active)
+
+taxa %>%
+  filter(active, rank_level <= 10) %>%
+  count()
+
+taxa %>%
+  filter(
+    active,
+    rank == "species",
+    grepl("^Panthera\\s", name)
+  ) %>%
+  select(name)
+```
+
+#### Activity
+
+- what is taxon 48460? why is its ancestry `NA`?
+- how many animal species there is in the dataset?
+  
+
+[this needs to be translated to Ibis]  
+```{r}
+taxa %>%
+  filter(taxon_id == 48460)
+
+taxa %>%
+  filter(
+    active,
+    grepl("^48460/1/", ancestry),
+    rank == "species"
+  ) %>%
+  count()      
+```
+
+
+### An exploration of the file formats
+
+* Before we dive into using Arrow to read large data files, we need to
+  do a tour of the different file formats supported by the Apache
+  Arrow ecosystem.
+  
+  We want to use an interactive approach here to avoid being
+  repetitive. Assign each group to convert the `taxa` CSV file to:
+  - arrow/feather
+  - parquet
+  [- should ORC be included here?]
+  
+  using the "single file" API.
+  
+  Introduce way of keeping track of time for performance tracking,
+  and how to measure disk usage of file.
+  
+  Point to the API documentation to show syntax for how to create
+  these files. Then ask:
+  - how long does it take to read the files back into Arrow?
+  - how much space do the files take on the hard drive?
+  - how long does a query on these files take?
+
+  Finalize exercise with creating a table to compare the different
+  formats including CSV.
+
+### Large files
+
+* We have been using Arrow but have not seen its benefits yet for
+  working with large data files, because the data is small enough 
+  that we could have used pandas to work with it.
+* The approach of using `read_tsv_arrow()` on large datasets does not
+  work as it loads the full dataset in memory and the datasets are too
+  large to fit in memory.
+* We need to use a different approach, the "Dataset API".
+
+* Read CSV photos file with dataset API. Show memory usage (if
+  interfaces allows us to do it easily).
+
+```{python}
+import ibis
+import time
+
+ibis.options.interactive = True
+
+con = ibis.duckdb.connect()
+con.register("~/datasets/inaturalist/csv/photos.csv", table_name = "photos")
+
+## this is fast because of deferred evaluation
+tic = time.perf_counter()
+freq_extensions = con.table("photos").extension.value_counts()
+toc = time.perf_counter()
+print(f"Counting unique values from the CSV file: {toc - tic:0.4f} seconds")
+
+## actually printing forces the computation and takes about 100 seconds
+tic = time.perf_counter()
+freq_extensions = con.table("photos").extension.value_counts()
+print(freq_extensions)
+toc = time.perf_counter()
+print(f"Counting unique values from the CSV file: {toc - tic:0.4f} seconds")
+```
+
+Let's convert to a single Parquet file to see what happens:
+
+
+```{python}
+import pyarrow as pa
+import pyarrow.csv
+import pyarrow.parquet as pq
+import time
+
+in_path = '~/datasets/inaturalist/csv/photos.csv'
+out_path = '~/datasets/inaturalist/photos_python.parquet'
+
+parse_options = pyarrow.csv.ParseOptions(delimiter="\t")
+
+tic = time.perf_counter()
+writer = None
+with pyarrow.csv.open_csv(in_path, parse_options = parse_options) as reader:
+    for next_chunk in reader:
+        if next_chunk is None:
+            break
+        if writer is None:
+            writer = pq.ParquetWriter(out_path, next_chunk.schema)
+        next_table = pa.Table.from_batches([next_chunk])
+        writer.write_table(next_table)
+writer.close()
+toc = time.perf_counter()
+print(f"Converted file in {toc - tic:0.4f} seconds")
+```
+
+The conversation takes 190 seconds. Let's redo a query (still using Ibis) on it.
+
+
+```python
+con.register("/home/francois/datasets/inat/photos_python.parquet", table_name = "photos_parquet")
+
+tic = time.perf_counter()
+freq_extensions_pq = con.table("photos_parquet").extension.value_counts()
+print(freq_extensions_pq)
+toc = time.perf_counter()
+print(f"Counting unique values from single parquet file: {toc - tic:0.4f} seconds")
+```
+
+Much faster. 1.2 seconds. Can we go even faster?
+
+[ need to work on transition here ]
+
+Let's create a collection of parquet files.  Typically, the files are
+partionned along a variable, but in this table, there is not an
+obvious variable we can use. Instead we are going to partition the
+data based on a maximum number of rows. And instead of reading in
+chunks manually by writing a for loop, we can also use the Dataset API
+to read the CSV file.
+
+```python
+import pyarrow
+import pyarrow.csv
+import pyarrow.dataset as ds
+import time
+
+in_path = "~/datasets/inaturalist/csv/photos.csv"
+out_path = "~/datasets/inaturalist/photos_python_table/"
+parse_options = pyarrow.csv.ParseOptions(delimiter = "\t")
+
+## read the CSV file using the dataset API
+tic = time.perf_counter()
+photos = ds.dataset(in_path,
+                    format = ds.CsvFileFormat(
+                        parse_options = parse_options
+                    ))
+toc = time.perf_counter()
+print(f"Reading CSV file in {toc - tic:0.4f} seconds")
+
+## Convert the CSV file to a collection of Parquet files
+tic = time.perf_counter()
+ds.write_dataset(photos, out_path,
+                 format="parquet", max_rows_per_file = 1e7)
+toc = time.perf_counter()
+print(f"Writing parquet file in {toc - tic:0.4f} seconds")
+
+## Read the collection of Parquet files
+tic = time.perf_counter()
+photos = ds.dataset(out_path,
+                    format = "parquet")
+toc = time.perf_counter()
+print(f"loading parquet file system in {toc - tic:0.4f} seconds")
+
+## Query this system of Parquet files
+con.register("parquet:///~/datasets/inaturalist/photos_parquet/*.parquet", table_name = "photos_multi_pq")
+tic = time.perf_counter()
+print(con.table("photos_multi_pq").extension.value_counts())
+toc = time.perf_counter()
+print(f"Group by and sum with Ibis in {toc - tic:0.4f} seconds")
+```
+
+This takes also about 1.2 seconds. The conversion to multiple Parquet
+files was faster.
+
+[note that with this approach we don't show that the Dataset API can
+read multiple CSV files but we do demonstrate how to do this on
+multiple parquet files.]
+ 
+### Activity
+
+Redo the same as for the photos csv file but with the observation dataset:
+- read the CSV file using the Dataset API
+- extract the year and month columns from the dataset
+- write to multi parquet filesystem partioned by year
+
+
+```python
+observations_csv = "//home/francois/datasets/inat/inaturalist-open-data-20220827/observations.csv"
+
+con.register(observations_csv, table_name = "observations_csv")
+
+t = con.table("observations_csv")
+
+with_dates = t.mutate(month = t.observed_on.month(), year = t.observed_on.year())
+
+observations = ds.dataset(
+     observations_csv,
+     format = ds.CsvFileFormat(
+          parse_options = pyarrow.csv.ParseOptions(delimiter = "\t")
+     )
+)
+
+```

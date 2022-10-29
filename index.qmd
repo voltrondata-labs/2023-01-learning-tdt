@@ -1,0 +1,7 @@
+---
+title: "Welcome"
+---
+
+This is draft version of the content that will be presented during
+Learning at The Data Thread, a 2-day, hands-on workshop to get started
+using Arrow and Ibis for working with larger than memory datasets.

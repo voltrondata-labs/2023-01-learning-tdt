@@ -1,0 +1,96 @@
+---
+title: "Part 1 -- Introduction"
+---
+
+
+## Introduction
+
+### Ice-breaking Activity
+
+Type in the chat:
+- what you know about Apache Arrow in one sentence
+
+### Demonstration 
+
+Demonstration of what the training is working towards that shows the
+power of Arrow to work with large datasets. This should be live coded
+but not take more than 5 min.
+
+## Overview of the Training
+
+* Importing data in the Apache Arrow ecosystems, what are the
+  different file formats, how do they differ, which ones to use?
+* Learning how to use Ibis for data wrangling on Parquet files
+* Use Ibis with remote data sources: AWS S3 and others (Big Query?
+  Postgres?)
+  
+
+## Presentation of the dataset
+
+### What is iNaturalist?
+
+add intro about project, show data on website
+
+### The dataset
+
+More info: https://github.com/inaturalist/inaturalist-open-data/tree/main/Metadata
+
+Data source: https://registry.opendata.aws/inaturalist-open-data/
+
+4 tables:
+- taxa.csv (most specialized) (153 MB): 
+  + taxon_id: unique identifier for a taxon
+  + ancestry: classification for the taxon
+  + rank_level: number associated with the rank. Parent have higher
+    numbers than children
+  + rank: Linnean ranks
+  + name: name of the taxa
+  
+[Illustrate with image that shows the full classification for a well known species, maybe Homo sapiens].
+
+- observers.csv (12 MB):
+  + observer_id: unique identifier for the observer, can be used to
+    construct URLs like <https://inaturalist.org/users/1>
+  + login: unique identifier for the observer
+  + name: personal name of the observer (if provided)
+  
+- photos.csv (16 GB):
+  + photo_uuid: unique identifier for the photo
+  + photo_id: numeric identifier for the photo, can be used to
+    construct URLs like <https://inaturalist.org/photos/1010101>
+  + observation_uuid: unique identifier for the association observation
+  + extension: character, image file format
+  + licence: license for the photo Creative Commons variant including CC0.
+  + width: number of pixels for the width of the image
+  + height: number of pixels for the height of the image
+  + position: order in which to display multiple photos of the same
+    observation.
+
+- observations.csv (9 GB):
+  + observation_uuid: unique identifier for the observation. Can be
+    used to construct URLs like
+    <https://inaturalist.org/observations/e041ae3d-1210-43a2-bdc2-8adb42b9e086
+  + observation_id: identifier used on the iNaturalist website. Can be
+    used to construct URLs like
+    <https://inaturalist.org/observations/1000000>.
+  + latitude: latitude for the observation
+  + longitude: longitude for the observation
+  + positional_accuracy: uncertainty in meters around the latitude and longitude
+  + taxon_id: the identifier of the taxon identified on the photo
+  + quality_grade: `Casual` observations are missing certain data
+    components (e.g. latitude) or may have flags associated with them
+    not shown here (e.g. `location appears incorrect`). Observations
+    flagged as not wild are also considered Casual. All other
+    observations are either `Needs ID` or `Research Grade`. Generally,
+    Research Grade observations have more than one agreeing
+    identifications at the species level, or if there are
+    disagreements at least ⅔ of the identifications are in agreement a
+    the species level.
+  + observed_on: the date at which the observation took place
+  
+[
+Create a glossary with some terms related to the dataset?
+  + taxon/taxa
+  + ancestry (it has a meaning that may not be familiar in this context)
+  + intro to Linnean classification
+]
