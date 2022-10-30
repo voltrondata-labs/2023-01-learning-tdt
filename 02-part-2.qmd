@@ -2,6 +2,7 @@
 title: "Part 2 -- Data Import and File Formats"
 execute:
   eval: false
+jupyter: python3
 ---
 
 
